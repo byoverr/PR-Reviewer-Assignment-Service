@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: pr_service
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+#  app:
+#    build: .
+#    depends_on:
+#      - db
+#    environment:
+#      DB_URL: "postgres://user:pass@db:5432/prdb?sslmode=disable"
+#    ports:
+#      - "8080:8080"
+
+volumes:
+  pgdata:

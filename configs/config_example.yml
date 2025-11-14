@@ -1,0 +1,3 @@
+db_url: "postgres://user:pass@localhost:5432/pr_service?sslmode=disable"
+port: "8080"
+log_level: "info"

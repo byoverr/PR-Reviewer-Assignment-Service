@@ -15,7 +15,7 @@ type Config struct {
 func Load() (*Config, error) {
 	var cfg Config
 
-	configPath := "./configs/config.yml"
+	configPath := "./configs/config_example.yml"
 	if _, err := os.Stat(configPath); err == nil {
 		if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 			return nil, err
