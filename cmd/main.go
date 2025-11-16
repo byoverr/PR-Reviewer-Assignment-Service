@@ -3,12 +3,20 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/byoverr/PR-Reviewer-Assignment-Service/internal/config"
+	"github.com/byoverr/PR-Reviewer-Assignment-Service/internal/handlers"
 	loggerConstructor "github.com/byoverr/PR-Reviewer-Assignment-Service/internal/logger"
-	"github.com/byoverr/PR-Reviewer-Assignment-Service/internal/models"
 	"github.com/byoverr/PR-Reviewer-Assignment-Service/internal/repository"
+	"github.com/byoverr/PR-Reviewer-Assignment-Service/internal/services"
+
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,79 +25,74 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	logger := loggerConstructor.New(cfg.LogLevel)
-	logger.Info("level", cfg.LogLevel)
+	logger := loggerConstructor.New(cfg.LogLevel, cfg.LogOutput, cfg.LogFilePath)
 
-	// DB pool
-	db, err := pgxpool.New(context.Background(), cfg.DBURL)
+	ctx := context.Background()
+	poolCfg, err := pgxpool.ParseConfig(cfg.DBURL)
 	if err != nil {
-		logger.Error("failed to connect to DB", err)
+		logger.Error("failed to parse DB config", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	db, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		logger.Error("failed to connect to DB", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	// Repository
-	//userRepo := repository.NewUserRepo(db)
+	// Repositories
 	teamRepo := repository.NewTeamRepo(db)
-	//prRepo := repository.NewPRRepo(db)
-
-	team := &models.Team{
-		Name: "John Team",
-		Members: []models.TeamMember{
-			{UserID: "u1", Username: "Alice", IsActive: true},
-			{UserID: "u2", Username: "Bob", IsActive: false},
-		},
-	}
-	err = teamRepo.CreateTeam(context.Background(), team)
-	logger.Info("ff", err)
+	userRepo := repository.NewUserRepo(db)
+	prRepo := repository.NewPRRepo(db)
 
 	// Services
-
-	// TODO: Services
+	teamSvc := services.NewTeamService(teamRepo, userRepo, logger)
+	userSvc := services.NewUserService(userRepo, prRepo, logger)
+	prSvc := services.NewPRService(prRepo, userRepo, logger)
 
 	// Handlers
-	// TODO: handlers
+	teamHandler := handlers.NewTeamHandler(teamSvc, logger)
+	userHandler := handlers.NewUserHandler(userSvc, logger)
+	prHandler := handlers.NewPRHandler(prSvc, logger)
 
 	// Gin
-	// TODO: gin
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
 
-	//router := gin.Default()
-	//router.GET("/", func(c *gin.Context) {
-	//	time.Sleep(5 * time.Second)
-	//	c.String(http.StatusOK, "Welcome Gin Server")
-	//})
-	//
-	//srv := &http.Server{
-	//	Addr:    ":8080",
-	//	Handler: router.Handler(),
-	//}
-	//
-	//go func() {
-	//	// service connections
-	//	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-	//		log.Fatalf("listen: %s\\n", err)
-	//	}
-	//}()
-	//
-	//// Wait for interrupt signal to gracefully shutdown the server with
-	//// a timeout of 5 seconds.
-	//quit := make(chan os.Signal, 1)
-	//// kill (no param) default send syscall.SIGTERM
-	//// kill -2 is syscall.SIGINT
-	//// kill -9 is syscall. SIGKILL but can"t be catch, so don't need add it
-	//signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	//<-quit
-	//log.Println("Shutdown Server ...")
-	//
-	//ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	//defer cancel()
-	//if err := srv.Shutdown(ctx); err != nil {
-	//	log.Fatal("Server Shutdown:", err)
-	//}
-	//// catching ctx.Done(). timeout of 5 seconds.
-	//select {
-	//case <-ctx.Done():
-	//	log.Println("timeout of 5 seconds.")
-	//}
-	//log.Println("Server exiting")
+	// Middleware (recovery for panics)
+	router.Use(gin.Recovery())
+
+	// Routes
+	handlers.SetupRoutes(router, prHandler, teamHandler, userHandler)
+
+	// Server
+	const shutdownTimeout = 5 * time.Second
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: router,
+	}
+
+	// Grateful shtdown
+	go func() {
+		if listenErr := srv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+			logger.Error("listen: %s\n", slog.String("error", listenErr.Error()))
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	logger.Info("shutting down server...")
+
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if shutdownErr := srv.Shutdown(ctxShutdown); shutdownErr != nil {
+		logger.Error("server forced to shutdown", slog.String("error", shutdownErr.Error()))
+	}
+
+	<-ctxShutdown.Done()
+	logger.Info("timeout of 5 seconds, server exiting")
+	logger.Info("server exiting")
 }

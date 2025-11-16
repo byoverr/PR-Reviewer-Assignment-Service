@@ -1,30 +1,21 @@
 package config
 
 import (
-	"os"
-
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
 type Config struct {
-	DBURL    string `yaml:"db_url" env:"DB_URL" env-default:"postgres://user:pass@localhost:5432/prdb?sslmode=disable" env-description:"PostgreSQL connection URL"`
-	Port     string `yaml:"port" env:"PORT" env-default:"8080" env-description:"HTTP server port"`
-	LogLevel string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info" env-description:"Logging level (debug/info/warn/error)"`
+	DBURL       string `env:"DB_URL"        env-required:"true" env-description:"PostgreSQL"`
+	Port        string `env:"PORT"                              env-description:"HTTP server port"                   env-default:"8080"`
+	LogLevel    string `env:"LOG_LEVEL"                         env-description:"Logging level"                      env-default:"info"`
+	LogOutput   string `env:"LOG_OUTPUT"                        env-description:"Log output: stdout or file"         env-default:"stdout"`
+	LogFilePath string `env:"LOG_FILE_PATH"                     env-description:"Log file path (if LOG_OUTPUT=file)" env-default:"./app.log"`
 }
 
 func Load() (*Config, error) {
 	var cfg Config
-
-	configPath := "./configs/config_example.yml"
-	if _, err := os.Stat(configPath); err == nil {
-		if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := cleanenv.ReadEnv(&cfg); err != nil {
-			return nil, err
-		}
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		return nil, err
 	}
-
 	return &cfg, nil
 }

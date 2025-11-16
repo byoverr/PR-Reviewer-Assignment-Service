@@ -21,6 +21,7 @@ func NewUserRepo(db *pgxpool.Pool) *UserRepo {
 	return &UserRepo{db: db}
 }
 
+// UpsertUser creates or updates a user.
 func (r *UserRepo) UpsertUser(ctx context.Context, user *models.User) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO users (id, name, team_name, is_active)
@@ -33,9 +34,12 @@ func (r *UserRepo) UpsertUser(ctx context.Context, user *models.User) error {
 	return nil
 }
 
+// GetUserByID gets a user by ID.
 func (r *UserRepo) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	u := &models.User{}
-	err := r.db.QueryRow(ctx, `SELECT id, name, team_name, is_active FROM users WHERE id = $1`, id).Scan(&u.ID, &u.Name, &u.TeamName, &u.IsActive)
+	err := r.db.QueryRow(ctx,
+		`SELECT id, name, team_name, is_active FROM users WHERE id = $1`,
+		id).Scan(&u.ID, &u.Name, &u.TeamName, &u.IsActive)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperrors.ErrNotFound
@@ -45,6 +49,7 @@ func (r *UserRepo) GetUserByID(ctx context.Context, id string) (*models.User, er
 	return u, nil
 }
 
+// UpdateUserActive updates the active status of a user.
 func (r *UserRepo) UpdateUserActive(ctx context.Context, id string, isActive bool) error {
 	res, err := r.db.Exec(ctx, `UPDATE users SET is_active = $2 WHERE id = $1`, id, isActive)
 	if err != nil {
@@ -56,6 +61,7 @@ func (r *UserRepo) UpdateUserActive(ctx context.Context, id string, isActive boo
 	return nil
 }
 
+// GetActiveUsersByTeam gets all active users for a team.
 func (r *UserRepo) GetActiveUsersByTeam(ctx context.Context, teamName string) ([]models.User, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, name, team_name, is_active FROM users 
@@ -69,17 +75,18 @@ func (r *UserRepo) GetActiveUsersByTeam(ctx context.Context, teamName string) ([
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Name, &u.TeamName, &u.IsActive); err != nil {
-			return nil, apperrors.Wrap(err, "failed to scan user")
+		if scanErr := rows.Scan(&u.ID, &u.Name, &u.TeamName, &u.IsActive); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan user")
 		}
 		users = append(users, u)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, apperrors.Wrap(err, "error iterating users")
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating users")
 	}
 	return users, nil
 }
 
+// GetTeamNameByUserID gets the team name for a user by user ID.
 func (r *UserRepo) GetTeamNameByUserID(ctx context.Context, userID string) (string, error) {
 	var teamName string
 	err := r.db.QueryRow(ctx, `SELECT team_name FROM users WHERE id = $1`, userID).Scan(&teamName)
@@ -92,6 +99,7 @@ func (r *UserRepo) GetTeamNameByUserID(ctx context.Context, userID string) (stri
 	return teamName, nil
 }
 
+// DeactivateUsersByTeam deactivates all users in a team.
 func (r *UserRepo) DeactivateUsersByTeam(ctx context.Context, teamName string) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {

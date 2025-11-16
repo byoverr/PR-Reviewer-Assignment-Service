@@ -22,6 +22,7 @@ func NewPRRepo(db *pgxpool.Pool) *PRRepo {
 	return &PRRepo{db: db}
 }
 
+// CreatePR creates PR.
 func (r *PRRepo) CreatePR(ctx context.Context, pr *models.PullRequest) error {
 	exists, err := r.ExistsPR(ctx, pr.ID)
 	if err != nil {
@@ -41,6 +42,7 @@ func (r *PRRepo) CreatePR(ctx context.Context, pr *models.PullRequest) error {
 	return nil
 }
 
+// GetPRByID gets PRs by ID.
 func (r *PRRepo) GetPRByID(ctx context.Context, id string) (*models.PullRequest, error) {
 	pr := &models.PullRequest{}
 	var createdAt time.Time
@@ -60,6 +62,7 @@ func (r *PRRepo) GetPRByID(ctx context.Context, id string) (*models.PullRequest,
 	return pr, nil
 }
 
+// UpdatePR updates PR.
 func (r *PRRepo) UpdatePR(ctx context.Context, pr *models.PullRequest) error {
 	current, err := r.GetPRByID(ctx, pr.ID)
 	if err != nil {
@@ -79,6 +82,7 @@ func (r *PRRepo) UpdatePR(ctx context.Context, pr *models.PullRequest) error {
 	return nil
 }
 
+// MergePR merge PR idempotently.
 func (r *PRRepo) MergePR(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE pull_requests SET status = 'MERGED', merged_at = CURRENT_TIMESTAMP
@@ -90,6 +94,7 @@ func (r *PRRepo) MergePR(ctx context.Context, id string) error {
 	return nil
 }
 
+// GetPRsForUser gets PRs for user.
 func (r *PRRepo) GetPRsForUser(ctx context.Context, userID string) ([]models.PullRequestShort, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, title, author_id, status
@@ -104,17 +109,18 @@ func (r *PRRepo) GetPRsForUser(ctx context.Context, userID string) ([]models.Pul
 	var prs []models.PullRequestShort
 	for rows.Next() {
 		var p models.PullRequestShort
-		if err := rows.Scan(&p.ID, &p.Title, &p.AuthorID, &p.Status); err != nil {
-			return nil, apperrors.Wrap(err, "failed to scan PR")
+		if scanErr := rows.Scan(&p.ID, &p.Title, &p.AuthorID, &p.Status); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan PR")
 		}
 		prs = append(prs, p)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, apperrors.Wrap(err, "error iterating PRs")
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating PRs")
 	}
 	return prs, nil
 }
 
+// ExistsPR checks pull requests for existence.
 func (r *PRRepo) ExistsPR(ctx context.Context, id string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pull_requests WHERE id = $1)`, id).Scan(&exists)
@@ -122,4 +128,171 @@ func (r *PRRepo) ExistsPR(ctx context.Context, id string) (bool, error) {
 		return false, apperrors.Wrap(err, "failed to check PR existence")
 	}
 	return exists, nil
+}
+
+// GetTotalPRs returns the total count of all pull requests.
+func (r *PRRepo) GetTotalPRs(ctx context.Context) (int, error) {
+	var total int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM pull_requests`).Scan(&total)
+	if err != nil {
+		return 0, apperrors.Wrap(err, "failed to count total PRs")
+	}
+	return total, nil
+}
+
+// GetPrsByStatus returns the count of open and merged pull requests.
+func (r *PRRepo) GetPrsByStatus(ctx context.Context) (int, int, error) {
+	var open, merged int
+	err := r.db.QueryRow(ctx, `
+		SELECT 
+			COUNT(*) FILTER (WHERE status = 'OPEN'),
+			COUNT(*) FILTER (WHERE status = 'MERGED')
+		FROM pull_requests
+	`).Scan(&open, &merged)
+	if err != nil {
+		return 0, 0, apperrors.Wrap(err, "failed to count PRs by status")
+	}
+	return open, merged, nil
+}
+
+// GetAssignmentsPerUser returns the number of PR assignments per active user, ordered by count descending.
+func (r *PRRepo) GetAssignmentsPerUser(ctx context.Context) ([]models.UserAssignment, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.id, u.name, COUNT(pr.id) as count
+		FROM users u
+		JOIN pull_requests pr ON u.id = ANY(pr.reviewers)
+		WHERE u.is_active = true
+		GROUP BY u.id, u.name
+		ORDER BY count DESC
+	`)
+	if err != nil {
+		return nil, apperrors.Wrap(err, "failed to count assignments per user")
+	}
+	defer rows.Close()
+
+	var assignments []models.UserAssignment
+	for rows.Next() {
+		var ua models.UserAssignment
+		if scanErr := rows.Scan(&ua.UserID, &ua.Name, &ua.Count); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan assignment")
+		}
+		assignments = append(assignments, ua)
+	}
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating assignments")
+	}
+	return assignments, nil
+}
+
+// GetTopReviewers returns the top 5 reviewers by assignment count.
+func (r *PRRepo) GetTopReviewers(ctx context.Context) ([]models.UserAssignment, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.id, u.name, COUNT(pr.id) as count
+		FROM users u
+		JOIN pull_requests pr ON u.id = ANY(pr.reviewers)
+		WHERE u.is_active = true
+		GROUP BY u.id, u.name
+		ORDER BY count DESC
+		LIMIT 5
+	`)
+	if err != nil {
+		return nil, apperrors.Wrap(err, "failed to get top reviewers")
+	}
+	defer rows.Close()
+
+	var top []models.UserAssignment
+	for rows.Next() {
+		var ua models.UserAssignment
+		if scanErr := rows.Scan(&ua.UserID, &ua.Name, &ua.Count); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan top reviewer")
+		}
+		top = append(top, ua)
+	}
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating top reviewers")
+	}
+	return top, nil
+}
+
+// GetAvgCloseTime returns the average time in seconds to close merged PRs and the count of merged PRs.
+func (r *PRRepo) GetAvgCloseTime(ctx context.Context) (float64, int, error) {
+	var avgSeconds float64
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT 
+			AVG(EXTRACT(epoch FROM (merged_at - created_at))),
+			COUNT(*)
+		FROM pull_requests
+		WHERE status = 'MERGED'
+	`).Scan(&avgSeconds, &count)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, 0, nil
+		}
+		return 0, 0, apperrors.Wrap(err, "failed to calculate avg close time")
+	}
+	return avgSeconds, count, nil
+}
+
+// GetIdleUsersPerTeam returns active users with 0 assignments, grouped by team.
+func (r *PRRepo) GetIdleUsersPerTeam(ctx context.Context) ([]models.TeamMetric, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.team_name, COUNT(u.id) as count
+		FROM users u
+		WHERE u.is_active = true
+		  AND u.id NOT IN (
+		    SELECT DISTINCT unnest(pr.reviewers)
+		    FROM pull_requests pr
+		    WHERE pr.status = 'OPEN'
+		  )
+		GROUP BY u.team_name
+		ORDER BY count DESC
+	`)
+	if err != nil {
+		return nil, apperrors.Wrap(err, "failed to get idle users per team")
+	}
+	defer rows.Close()
+
+	var metrics []models.TeamMetric
+	for rows.Next() {
+		var tm models.TeamMetric
+		if scanErr := rows.Scan(&tm.TeamName, &tm.Count); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan idle metric")
+		}
+		metrics = append(metrics, tm)
+	}
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating idle metrics")
+	}
+	return metrics, nil
+}
+
+// GetNeedyPRsPerTeam returns OPEN PRs with need_more_reviewers=true, grouped by author's team.
+func (r *PRRepo) GetNeedyPRsPerTeam(ctx context.Context) ([]models.TeamMetric, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.team_name, COUNT(pr.id) as count
+		FROM pull_requests pr
+		JOIN users u ON pr.author_id = u.id
+		WHERE pr.status = 'OPEN'
+		  AND pr.need_more_reviewers = true
+		GROUP BY u.team_name
+		ORDER BY count DESC
+	`)
+	if err != nil {
+		return nil, apperrors.Wrap(err, "failed to get needy PRs per team")
+	}
+	defer rows.Close()
+
+	var metrics []models.TeamMetric
+	for rows.Next() {
+		var tm models.TeamMetric
+		if scanErr := rows.Scan(&tm.TeamName, &tm.Count); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan needy metric")
+		}
+		metrics = append(metrics, tm)
+	}
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating needy metrics")
+	}
+	return metrics, nil
 }

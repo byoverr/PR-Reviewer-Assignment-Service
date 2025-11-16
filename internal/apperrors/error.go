@@ -9,7 +9,8 @@ var (
 	ErrPRMerged     = errors.New("cannot modify merged PR")      // PR_MERGED
 	ErrNotAssigned  = errors.New("reviewer not assigned to PR")  // NOT_ASSIGNED
 	ErrNoCandidate  = errors.New("no active candidates in team") // NO_CANDIDATE
-	ErrInvalidInput = errors.New("invalid input")
+	ErrInvalidInput = errors.New("invalid input")                // INVALID_INPUT
+	ErrInternal     = errors.New("internal error")               // INTERNAL_ERROR
 )
 
 func Wrap(err error, msg string) error {

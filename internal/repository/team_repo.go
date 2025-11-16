@@ -21,6 +21,7 @@ func NewTeamRepo(db *pgxpool.Pool) *TeamRepo {
 	return &TeamRepo{db: db}
 }
 
+// CreateTeam creates team.
 func (r *TeamRepo) CreateTeam(ctx context.Context, team *models.Team) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -34,23 +35,20 @@ func (r *TeamRepo) CreateTeam(ctx context.Context, team *models.Team) error {
 		}
 	}()
 
-	// Insert team
-	_, err = tx.Exec(ctx, `INSERT INTO teams (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, team.Name)
-	if err != nil {
-		return apperrors.Wrap(err, "failed to insert team")
-	}
-
-	// Check existence
 	var exists bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM teams WHERE name = $1)`, team.Name).Scan(&exists)
 	if err != nil {
 		return apperrors.Wrap(err, "failed to check team existence")
 	}
-	if !exists {
-		return apperrors.ErrTeamExists
+	if exists {
+		return apperrors.ErrTeamExists // ← Early return, no upsert
 	}
 
-	// Upsert members
+	_, err = tx.Exec(ctx, `INSERT INTO teams (name) VALUES ($1)`, team.Name)
+	if err != nil {
+		return apperrors.Wrap(err, "failed to insert team")
+	}
+
 	for _, m := range team.Members {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO users (id, name, team_name, is_active)
@@ -65,10 +63,10 @@ func (r *TeamRepo) CreateTeam(ctx context.Context, team *models.Team) error {
 	return nil
 }
 
+// GetTeamByName gets team by name.
 func (r *TeamRepo) GetTeamByName(ctx context.Context, name string) (*models.Team, error) {
 	team := &models.Team{Name: name}
 
-	// Check team
 	err := r.db.QueryRow(ctx, `SELECT name FROM teams WHERE name = $1`, name).Scan(&team.Name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -77,7 +75,6 @@ func (r *TeamRepo) GetTeamByName(ctx context.Context, name string) (*models.Team
 		return nil, apperrors.Wrap(err, "failed to query team")
 	}
 
-	// Get members
 	rows, err := r.db.Query(ctx, `SELECT id, name, is_active FROM users WHERE team_name = $1`, name)
 	if err != nil {
 		return nil, apperrors.Wrap(err, "failed to query members")
@@ -87,13 +84,13 @@ func (r *TeamRepo) GetTeamByName(ctx context.Context, name string) (*models.Team
 	team.Members = []models.TeamMember{}
 	for rows.Next() {
 		var m models.TeamMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.IsActive); err != nil {
-			return nil, apperrors.Wrap(err, "failed to scan member")
+		if scanErr := rows.Scan(&m.UserID, &m.Username, &m.IsActive); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan member")
 		}
 		team.Members = append(team.Members, m)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, apperrors.Wrap(err, "error iterating members")
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating members")
 	}
 
 	return team, nil
