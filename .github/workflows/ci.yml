@@ -64,16 +64,16 @@ jobs:
           POSTGRES_PORT: 5433
       
       - name: run unit tests
-        run: go test -v -race -coverprofile=coverage-unit.out ./tests/unit/...
+        run: go test -v -race -coverprofile=coverage-unit.out -coverpkg=./internal/... ./tests/unit/...
       
       - name: run integration tests
-        run: go test -v -race -coverprofile=coverage-integration.out ./tests/integration/...
+        run: go test -v -race -coverprofile=coverage-integration.out -coverpkg=./internal/... ./tests/integration/...
         env:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5433
       
       - name: run e2e tests
-        run: go test -v -race -coverprofile=coverage-e2e.out ./tests/e2e/...
+        run: go test -v -race -coverprofile=coverage-e2e.out -coverpkg=./internal/... ./tests/e2e/...
         env:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5433
