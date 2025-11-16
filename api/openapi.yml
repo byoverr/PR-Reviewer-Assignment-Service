@@ -8,6 +8,7 @@ tags:
   - name: Users
   - name: PullRequests
   - name: Health
+  - name: Stats
 
 components:
   parameters:
@@ -120,12 +121,63 @@ components:
         status:
           type: string
           enum: [OPEN, MERGED]
+    PrsTotal:
+      type: object
+      properties:
+        total_prs: { type: integer, example: 10 }
+
+    PrsStatus:
+      type: object
+      properties:
+        open_prs: { type: integer, example: 6 }
+        merged_prs: { type: integer, example: 4 }
+
+    UserAssignment:
+      type: object
+      properties:
+        user_id: { type: string, example: "u1" }
+        username: { type: string, example: "Alice" }
+        assignment_count: { type: integer, example: 4 }
+
+    UserAssignments:
+      type: object
+      properties:
+        user_assignments: { type: array, items: { $ref: '#/components/schemas/UserAssignment' } }
+
+    TopReviewers:
+      type: object
+      properties:
+        top_reviewers: { type: array, items: { $ref: '#/components/schemas/UserAssignment' } }
+
+    AvgCloseTimeDetail:
+      type: object
+      properties:
+        average_seconds: { type: number, example: 259200.5 }
+        breakdown:
+          type: object
+          properties:
+            days: { type: integer, example: 3 }
+            hours: { type: integer, example: 0 }
+            minutes: { type: integer, example: 0 }
+            seconds: { type: integer, example: 0 }
+        merged_prs_count: { type: integer, example: 4 }
+
+    TeamMetric:
+      type: object
+      properties:
+        team_name: { type: string, example: "backend" }
+        count: { type: integer, example: 3 }
+
+    TeamMetrics:
+      type: object
+      properties:
+        team_metrics: { type: array, items: { $ref: '#/components/schemas/TeamMetric' } }
 
 paths:
   /team/add:
     post:
       tags: [Teams]
-      summary: Создать команду с участниками (создаёт/обновляет пользователей)
+      summary: Создать команду с участниками
       requestBody:
         required: true
         content:
@@ -201,6 +253,54 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /team/add-member:
+    post:
+      tags: [ Teams ]
+      summary: Добавить/обновить участника в существующей команде
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ team_name, member ]
+              properties:
+                team_name:
+                  type: string
+                  example: "backend"
+                member:
+                  $ref: '#/components/schemas/TeamMember'
+            example:
+              team_name: backend
+              member:
+                user_id: u3
+                username: Charlie
+                is_active: true
+      responses:
+        '200':
+          description: Участник добавлен/обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "member added successfully"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: team not found
 
   /users/setIsActive:
     post:
@@ -438,3 +538,131 @@ paths:
                     pull_request_name: Add search
                     author_id: u1
                     status: OPEN
+  /stats/prs-total:
+    get:
+      tags: [ Stats ]
+      summary: Получить общее количество PR
+      responses:
+        '200':
+          description: Общее количество PR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrsTotal'
+              example:
+                total_prs: 10
+
+  /stats/prs-status:
+    get:
+      tags: [ Stats ]
+      summary: Получить количество PR по статусам
+      responses:
+        '200':
+          description: PR по статусам
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrsStatus'
+              example:
+                open_prs: 6
+                merged_prs: 4
+
+  /stats/assignments-per-user:
+    get:
+      tags: [ Stats ]
+      summary: Назначения по пользователям (активные)
+      responses:
+        '200':
+          description: Назначения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAssignments'
+              example:
+                user_assignments:
+                  - user_id: u1
+                    username: Alice
+                    assignment_count: 4
+
+  /stats/top-reviewers:
+    get:
+      tags: [ Stats ]
+      summary: Топ-5 самых занятых ревьюеров
+      responses:
+        '200':
+          description: Топ ревьюеры
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopReviewers'
+              example:
+                top_reviewers:
+                  - user_id: u1
+                    username: Alice
+                    assignment_count: 4
+
+  /stats/avg-close-time:
+    get:
+      tags: [ Stats ]
+      summary: Среднее время закрытия PR
+      responses:
+        '200':
+          description: Среднее время
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvgCloseTimeDetail'
+              example:
+                average_seconds: 259200.5
+                breakdown:
+                  days: 3
+                  hours: 0
+                  minutes: 0
+                  seconds: 0
+                merged_prs_count: 4
+
+  /stats/idle-users-per-team:
+    get:
+      tags: [ Stats ]
+      summary: Неактивные пользователи (без PR) по командам
+      responses:
+        '200':
+          description: Idle users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMetrics'
+              example:
+                team_metrics:
+                  - team_name: backend
+                    count: 3
+
+  /stats/needy-prs-per-team:
+    get:
+      tags: [ Stats ]
+      summary: PR без ревьюеров по командам
+      responses:
+        '200':
+          description: Needy PRs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMetrics'
+              example:
+                team_metrics:
+                  - team_name: backend
+                    count: 2
+
+  /health:
+    get:
+      tags: [ Health ]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
