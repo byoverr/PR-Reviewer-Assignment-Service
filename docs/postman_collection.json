@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "PR Reviewer Assignment Service API",
+    "description": "Updated with /team/add-member. Base URL: {{base_url}}. Vars: {{team_name}}, {{user_id}}, {{pr_id}}. Run in order: Create team → Add member → Create PR → Stats.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "team_name",
+      "value": "backend",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "u1",
+      "type": "string"
+    },
+    {
+      "key": "pr_id",
+      "value": "pr-1001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Teams",
+      "item": [
+        {
+          "name": "Create Team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"team_name\": \"{{team_name}}\",\n  \"members\": [\n    {\n      \"user_id\": \"u1\",\n      \"username\": \"Alice\",\n      \"is_active\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/team/add",
+              "host": ["{{base_url}}"],
+              "path": ["team", "add"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Member to Team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"team_name\": \"{{team_name}}\",\n  \"member\": {\n    \"user_id\": \"u3\",\n    \"username\": \"Charlie\",\n    \"is_active\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/team/add-member",
+              "host": ["{{base_url}}"],
+              "path": ["team", "add-member"]
+            }
+          }
+        },
+        {
+          "name": "Get Team",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/team/get?team_name={{team_name}}",
+              "host": ["{{base_url}}"],
+              "path": ["team", "get"],
+              "query": [
+                {
+                  "key": "team_name",
+                  "value": "{{team_name}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Set User Active",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"u2\",\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/setIsActive",
+              "host": ["{{base_url}}"],
+              "path": ["users", "setIsActive"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get PRs for User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/getReview?user_id={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["users", "getReview"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "{{user_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "PullRequests",
+      "item": [
+        {
+          "name": "Create PR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pull_request_id\": \"{{pr_id}}\",\n  \"pull_request_name\": \"Add search\",\n  \"author_id\": \"u1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pullRequest/create",
+              "host": ["{{base_url}}"],
+              "path": ["pullRequest", "create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Merge PR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pull_request_id\": \"{{pr_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pullRequest/merge",
+              "host": ["{{base_url}}"],
+              "path": ["pullRequest", "merge"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reassign Reviewer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pull_request_id\": \"{{pr_id}}\",\n  \"old_reviewer_id\": \"u2\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pullRequest/reassign",
+              "host": ["{{base_url}}"],
+              "path": ["pullRequest", "reassign"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Stats",
+      "item": [
+        {
+          "name": "Total PRs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/prs-total",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "prs-total"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PRs by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/prs-status",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "prs-status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Assignments per User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/assignments-per-user",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "assignments-per-user"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Top Reviewers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/top-reviewers",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "top-reviewers"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Avg Close Time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/avg-close-time",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "avg-close-time"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Idle Users per Team",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/idle-users-per-team",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "idle-users-per-team"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Needy PRs per Team",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/needy-prs-per-team",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "needy-prs-per-team"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
