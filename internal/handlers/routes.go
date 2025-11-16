@@ -18,6 +18,7 @@ func SetupRoutes(r *gin.Engine, prHandler *PRHandler, teamHandler *TeamHandler, 
 	// Users
 	api.POST("/users/setIsActive", userHandler.SetUserActive)
 	api.GET("/users/getReview", userHandler.GetPRsForUser)
+	api.POST("/users/deactivateByTeam", userHandler.DeactivateUsersByTeam)
 
 	// PullRequests
 	api.POST("/pullRequest/create", prHandler.CreatePR)

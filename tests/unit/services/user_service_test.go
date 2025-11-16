@@ -146,6 +146,17 @@ func (m *mockPRRepoForUserService) GetNeedyPRsPerTeam(ctx context.Context) ([]mo
 	return args.Get(0).([]models.TeamMetric), args.Error(1)
 }
 
+func (m *mockPRRepoForUserService) GetOpenPRsWithReviewersFromTeam(
+	ctx context.Context,
+	teamName string,
+) ([]models.PullRequest, error) {
+	args := m.Called(ctx, teamName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.PullRequest), args.Error(1)
+}
+
 func TestUserService_SetUserActive(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	mUserRepo := &mockUserRepoForUserService{}
@@ -258,32 +269,146 @@ func TestUserService_GetPRsForUser(t *testing.T) {
 
 func TestUserService_DeactivateUsersByTeam(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	mUserRepo := &mockUserRepoForUserService{}
-	mPRRepo := &mockPRRepoForUserService{}
 
-	svc := services.NewUserService(mUserRepo, mPRRepo, log)
+	t.Run("Success_NoPRs", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
 
-	t.Run("Success", func(t *testing.T) {
+		activeUsers := []models.User{
+			{ID: "u1", Name: "User1", TeamName: "team1", IsActive: true},
+			{ID: "u2", Name: "User2", TeamName: "team1", IsActive: true},
+		}
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsers, nil)
 		mUserRepo.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(nil)
+		mPRRepo.On("GetOpenPRsWithReviewersFromTeam", mock.Anything, "team1").Return([]models.PullRequest{}, nil)
 
 		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
 		require.NoError(t, err)
 		mUserRepo.AssertExpectations(t)
+		mPRRepo.AssertExpectations(t)
+	})
+
+	t.Run("Success_WithPRReassignment_PartialTeam", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
+
+		activeUsersBefore := []models.User{
+			{ID: "u1", Name: "User1", TeamName: "team1", IsActive: true},
+			{ID: "u2", Name: "User2", TeamName: "team1", IsActive: true},
+		}
+
+		activeUsersAfter := []models.User{
+			{ID: "u3", Name: "User3", TeamName: "team1", IsActive: true},
+		}
+
+		pr := &models.PullRequest{
+			ID:        "pr-1",
+			Title:     "Test PR",
+			AuthorID:  "author1",
+			Status:    "OPEN",
+			Reviewers: []string{"u1", "u2"},
+		}
+
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsersBefore, nil).Once()
+		mUserRepo.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(nil)
+		mPRRepo.On("GetOpenPRsWithReviewersFromTeam", mock.Anything, "team1").Return([]models.PullRequest{*pr}, nil)
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsersAfter, nil).Once()
+
+		mPRRepo.On("UpdatePR", mock.Anything, mock.MatchedBy(func(p *models.PullRequest) bool {
+			return p.ID == "pr-1" && len(p.Reviewers) >= 1 && p.Reviewers[0] == "u3"
+		})).Return(nil)
+
+		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
+		require.NoError(t, err)
+		mUserRepo.AssertExpectations(t)
+		mPRRepo.AssertExpectations(t)
+	})
+
+	t.Run("Success_NoActiveReplacement", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
+
+		activeUsers := []models.User{
+			{ID: "u1", Name: "User1", TeamName: "team1", IsActive: true},
+			{ID: "u2", Name: "User2", TeamName: "team1", IsActive: true},
+		}
+
+		activeUsersAfter := []models.User{}
+
+		pr := &models.PullRequest{
+			ID:        "pr-1",
+			Title:     "Test PR",
+			AuthorID:  "author1",
+			Status:    "OPEN",
+			Reviewers: []string{"u1", "u2"},
+		}
+
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsers, nil).Once()
+		mUserRepo.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(nil)
+		mPRRepo.On("GetOpenPRsWithReviewersFromTeam", mock.Anything, "team1").Return([]models.PullRequest{*pr}, nil)
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsersAfter, nil).Once()
+
+		mPRRepo.On("UpdatePR", mock.Anything, mock.MatchedBy(func(p *models.PullRequest) bool {
+			return p.ID == "pr-1" && len(p.Reviewers) == 0
+		})).Return(nil)
+
+		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
+		require.NoError(t, err)
+		mUserRepo.AssertExpectations(t)
+		mPRRepo.AssertExpectations(t)
 	})
 
 	t.Run("InvalidInput", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
+
 		err := svc.DeactivateUsersByTeam(context.Background(), "")
 		assert.ErrorIs(t, err, apperrors.ErrInvalidInput)
 	})
 
-	t.Run("Error", func(t *testing.T) {
-		mUserRepo7 := &mockUserRepoForUserService{}
-		mPRRepo7 := &mockPRRepoForUserService{}
-		svc7 := services.NewUserService(mUserRepo7, mPRRepo7, log)
+	t.Run("Error_GetActiveUsers", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
 
-		mUserRepo7.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(apperrors.ErrInternal)
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(nil, apperrors.ErrInternal)
 
-		err := svc7.DeactivateUsersByTeam(context.Background(), "team1")
+		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
 		assert.Error(t, err)
+	})
+
+	t.Run("Error_Deactivate", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
+
+		activeUsers := []models.User{
+			{ID: "u1", Name: "User1", TeamName: "team1", IsActive: true},
+		}
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsers, nil)
+		mUserRepo.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(apperrors.ErrInternal)
+
+		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
+		assert.Error(t, err)
+	})
+
+	t.Run("Error_GetOpenPRs_Continues", func(t *testing.T) {
+		mUserRepo := &mockUserRepoForUserService{}
+		mPRRepo := &mockPRRepoForUserService{}
+		svc := services.NewUserService(mUserRepo, mPRRepo, log)
+
+		activeUsers := []models.User{
+			{ID: "u1", Name: "User1", TeamName: "team1", IsActive: true},
+		}
+		mUserRepo.On("GetActiveUsersByTeam", mock.Anything, "team1").Return(activeUsers, nil)
+		mUserRepo.On("DeactivateUsersByTeam", mock.Anything, "team1").Return(nil)
+		mPRRepo.On("GetOpenPRsWithReviewersFromTeam", mock.Anything, "team1").Return(nil, apperrors.ErrInternal)
+
+		err := svc.DeactivateUsersByTeam(context.Background(), "team1")
+		require.NoError(t, err)
 	})
 }

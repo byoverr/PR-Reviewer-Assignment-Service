@@ -296,3 +296,35 @@ func (r *PRRepo) GetNeedyPRsPerTeam(ctx context.Context) ([]models.TeamMetric, e
 	}
 	return metrics, nil
 }
+
+// GetOpenPRsWithReviewersFromTeam returns all OPEN PRs that have reviewers from the specified team.
+func (r *PRRepo) GetOpenPRsWithReviewersFromTeam(ctx context.Context, teamName string) ([]models.PullRequest, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT pr.id, pr.title, pr.author_id, pr.status, pr.reviewers, pr.need_more_reviewers, pr.created_at, pr.merged_at
+		FROM pull_requests pr
+		JOIN users u ON u.id = ANY(pr.reviewers)
+		WHERE pr.status = 'OPEN'
+		  AND u.team_name = $1
+	`, teamName)
+	if err != nil {
+		return nil, apperrors.Wrap(err, "failed to get open PRs with reviewers from team")
+	}
+	defer rows.Close()
+
+	var prs []models.PullRequest
+	for rows.Next() {
+		var pr models.PullRequest
+		var createdAt time.Time
+		var mergedAt *time.Time
+		if scanErr := rows.Scan(&pr.ID, &pr.Title, &pr.AuthorID, &pr.Status, &pr.Reviewers, &pr.NeedMoreReviewers, &createdAt, &mergedAt); scanErr != nil {
+			return nil, apperrors.Wrap(scanErr, "failed to scan PR")
+		}
+		pr.CreatedAt = &createdAt
+		pr.MergedAt = mergedAt
+		prs = append(prs, pr)
+	}
+	if scanErr := rows.Err(); scanErr != nil {
+		return nil, apperrors.Wrap(scanErr, "error iterating PRs")
+	}
+	return prs, nil
+}

@@ -538,6 +538,46 @@ paths:
                     pull_request_name: Add search
                     author_id: u1
                     status: OPEN
+  /users/deactivateByTeam:
+    post:
+      tags: [Users]
+      summary: Массовая деактивация пользователей команды и безопасное переназначение открытых PR
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ team_name ]
+              properties:
+                team_name:
+                  type: string
+                  example: "backend"
+            example:
+              team_name: backend
+      responses:
+        '200':
+          description: Пользователи деактивированы и PR переназначены
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "users deactivated and PRs reassigned successfully"
+        '400':
+          description: Неверный ввод
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Нет/неверный админский токен
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /stats/prs-total:
     get:
       tags: [ Stats ]

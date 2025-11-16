@@ -23,7 +23,7 @@ func New(level, output, filePath string) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: lvl}
 
 	if output == "file" {
-		//nolint:gosec
+		//nolint:gosec // log files is allowed.
 		f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			h = slog.NewTextHandler(os.Stdout, opts)

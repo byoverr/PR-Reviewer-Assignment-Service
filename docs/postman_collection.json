@@ -155,6 +155,28 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Deactivate Users by Team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"team_name\": \"{{team_name}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/deactivateByTeam",
+              "host": ["{{base_url}}"],
+              "path": ["users", "deactivateByTeam"]
+            }
+          },
+          "response": []
         }
       ]
     },

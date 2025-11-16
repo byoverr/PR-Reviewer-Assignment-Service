@@ -191,7 +191,7 @@ func (s *PRService) selectNewReviewer(
 		return "", apperrors.ErrNoCandidate
 	}
 
-	//nolint:gosec
+	//nolint:gosec // for this app is allowed to use rand/v2
 	newReviewer := candidates[rand.IntN(len(candidates))]
 	return newReviewer, nil
 }

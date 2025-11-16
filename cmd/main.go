@@ -69,15 +69,21 @@ func main() {
 	// Server
 	const shutdownTimeout = 5 * time.Second
 
+	const readHeaderTimeout = 60 * time.Second
+
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
+		Addr:        ":" + cfg.Port,
+		Handler:     router,
+		ReadTimeout: readHeaderTimeout,
 	}
+
+	logger.Info("starting server", slog.String("port", cfg.Port))
 
 	// Grateful shtdown
 	go func() {
 		if listenErr := srv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
 			logger.Error("listen: %s\n", slog.String("error", listenErr.Error()))
+			os.Exit(1)
 		}
 	}()
 

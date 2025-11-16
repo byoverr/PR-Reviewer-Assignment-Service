@@ -34,4 +34,5 @@ type PRRepository interface {
 	GetAvgCloseTime(ctx context.Context) (float64, int, error)
 	GetIdleUsersPerTeam(ctx context.Context) ([]models.TeamMetric, error)
 	GetNeedyPRsPerTeam(ctx context.Context) ([]models.TeamMetric, error)
+	GetOpenPRsWithReviewersFromTeam(ctx context.Context, teamName string) ([]models.PullRequest, error)
 }

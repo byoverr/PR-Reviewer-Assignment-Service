@@ -64,6 +64,29 @@ func (h *UserHandler) GetPRsForUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user_id": userID, "pull_requests": prs})
 }
 
+// DeactivateUsersByTeam handles POST /users/deactivateByTeam.
+func (h *UserHandler) DeactivateUsersByTeam(c *gin.Context) {
+	var req struct {
+		TeamName string `json:"team_name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.log.Warn("invalid deactivate by team request", slog.String("error", err.Error()))
+		h.mapErrorToResponse(c, apperrors.ErrInvalidInput)
+		return
+	}
+
+	err := h.svc.DeactivateUsersByTeam(c.Request.Context(), req.TeamName)
+	if err != nil {
+		h.log.Error("deactivate users by team failed",
+			slog.String("team_name", req.TeamName),
+			slog.String("error", err.Error()))
+		h.mapErrorToResponse(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "users deactivated and PRs reassigned successfully"})
+}
+
 func (h *UserHandler) mapErrorToResponse(c *gin.Context, err error) {
 	status := http.StatusInternalServerError
 	code := ErrorCodeInternalError

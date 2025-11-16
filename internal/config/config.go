@@ -1,7 +1,10 @@
 package config
 
 import (
+	"log/slog"
+
 	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -13,9 +16,16 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	if err := godotenv.Load(); err != nil {
+		//nolint: sloglint // Using default logger for config loading is acceptable
+		slog.Info("No .env file found, relying on environment variables and defaults")
+	}
+
 	var cfg Config
+
 	if err := cleanenv.ReadEnv(&cfg); err != nil {
 		return nil, err
 	}
+
 	return &cfg, nil
 }

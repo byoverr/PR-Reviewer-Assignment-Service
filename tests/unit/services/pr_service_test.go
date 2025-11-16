@@ -528,6 +528,7 @@ func TestPRService_GetAvgCloseTime(t *testing.T) {
 
 		result, err := svc10.GetAvgCloseTime(context.Background())
 		require.NoError(t, err)
+		//nolint:testifylint // reason: explicit comparison with zero is acceptable here
 		assert.Equal(t, 0.0, result.AverageSeconds)
 		assert.Equal(t, 0, result.MergedPRsCount)
 	})
