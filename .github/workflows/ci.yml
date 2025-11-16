@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: set go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: go.sum
+      
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pr_service_e2e
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: set go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: go.sum
+      
+      - name: install dependencies
+        run: go mod download
+      
+      - name: run migrations
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+          goose -dir migrations postgres "postgres://user:pass@localhost:5433/pr_service_e2e?sslmode=disable" up
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5433
+      
+      - name: run unit tests
+        run: go test -v -race -coverprofile=coverage-unit.out ./tests/unit/...
+      
+      - name: run integration tests
+        run: go test -v -race -coverprofile=coverage-integration.out ./tests/integration/...
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5433
+      
+      - name: run e2e tests
+        run: go test -v -race -coverprofile=coverage-e2e.out ./tests/e2e/...
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5433
+      
+      - name: Show coverage
+        run: |
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Unit tests:" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage-unit.out | tail -1 >> $GITHUB_STEP_SUMMARY || true
+          echo "Integration tests:" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage-integration.out | tail -1 >> $GITHUB_STEP_SUMMARY || true
+          echo "E2E tests:" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage-e2e.out | tail -1 >> $GITHUB_STEP_SUMMARY || true
+
