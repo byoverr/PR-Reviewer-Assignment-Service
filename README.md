@@ -13,8 +13,15 @@
 ## Быстрый старт
 
 ### Локальный запуск
+
+Должны быть установлены
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Go](https://go.dev/dl/)
+- [Goose (CLI для миграций)](https://pressly.github.io/goose/installation/#linux)
+
+**Для MacOS**
 ```bash
-# Запустить контейнер с БД
+# Запустить контейнер с БД (или можно поднять у себя локально)
 docker compose -f docker-compose-db.yml up --build
 
 # Провести миграцию 
@@ -23,7 +30,27 @@ GOOSE_DBSTRING="postgres://user:pass@localhost:5432/pr_service?sslmode=disable" 
 goose -dir ./migrations up
 
 # Запустить программу
-make run
+go run ./cmd/main.go
+```
+**Для Windows**
+```powershell
+# Запустить контейнер с БД (или можно поднять у себя локально)
+docker compose -f docker-compose-db.yml up --build
+
+# Миграции (PowerShell)
+$env:GOOSE_DRIVER = "postgres"
+$env:GOOSE_DBSTRING = "postgres://user:pass@localhost:5432/pr_service?sslmode=disable"
+
+goose -dir ./migrations up
+
+# Миграции (cmd.exe)
+set GOOSE_DRIVER=postgres
+set GOOSE_DBSTRING=postgres://user:pass@localhost:5432/pr_service?sslmode=disable
+
+goose -dir .\migrations up
+
+# Запустить программу
+go run ./cmd/main.go
 ```
 ### Docker Compose
 
